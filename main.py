@@ -1,6 +1,11 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
+from typing import Any, Dict
+
+from schemas import ContactMessage
+from database import create_document
 
 app = FastAPI()
 
@@ -63,6 +68,32 @@ def test_database():
     response["database_name"] = "✅ Set" if os.getenv("DATABASE_NAME") else "❌ Not Set"
     
     return response
+
+@app.post("/api/contact")
+def submit_contact(payload: ContactMessage) -> Dict[str, Any]:
+    """
+    Accepts a contact submission and stores it in the database.
+    Email forwarding can be wired to an external provider (SendGrid/Mailgun) via env vars later.
+    """
+    try:
+        doc_id = create_document("contactmessage", payload)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save message: {str(e)}")
+
+    # Compose email-like structure (not actually sending here)
+    composed = {
+        "to": "hello@togetherlearning.com",
+        "from": payload.email,
+        "subject": payload.subject,
+        "message": payload.message,
+    }
+
+    return {
+        "status": "ok",
+        "message": "Thanks! Your message has been received.",
+        "id": doc_id,
+        "email": composed,
+    }
 
 
 if __name__ == "__main__":
